@@ -192,8 +192,18 @@
     </div>
     <div class="row">
       <div>
-        <label>総ゲーム数</label>
+        <label>総ゲーム数 <span class="hint" style="display:inline">(BB/RB判定用)</span></label>
         <input type="number" inputmode="numeric" id="games" placeholder="例: 3000" min="0">
+      </div>
+      <div>
+        <label>BB回数</label>
+        <input type="number" inputmode="numeric" id="bb" placeholder="0" min="0">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>RB回数 (合算)</label>
+        <input type="number" inputmode="numeric" id="rb" placeholder="0" min="0">
       </div>
       <div>
         <label>ぶどう回数</label>
@@ -202,13 +212,11 @@
     </div>
     <div class="row">
       <div>
-        <label>BB回数</label>
-        <input type="number" inputmode="numeric" id="bb" placeholder="0" min="0">
+        <label>ぶどうカウント区間ゲーム数</label>
+        <input type="number" inputmode="numeric" id="grapeGames" placeholder="途中参加時のみ" min="0">
+        <div class="hint">空欄なら総ゲーム数を使用 (1回転目から見ている場合)</div>
       </div>
-      <div>
-        <label>RB回数 (合算)</label>
-        <input type="number" inputmode="numeric" id="rb" placeholder="0" min="0">
-      </div>
+      <div></div>
     </div>
     <details style="margin-top:8px">
       <summary>単独REG / チェリーREGも個別入力する</summary>
@@ -453,6 +461,7 @@ function judge() {
   const bb = val("bb");
   const rbCombined = val("rb");
   const grape = val("grape");
+  const grapeGamesIn = val("grapeGames");
   const sReg = val("singleReg");
   const cReg = val("cherryReg");
 
@@ -464,30 +473,28 @@ function judge() {
   const rb = useSeparateReg ? (sReg + cReg) : rbCombined;
   if (!useSeparateReg && rb === null) { alert("RB回数を入力してください"); return; }
 
+  const grapeGames = (grapeGamesIn !== null && grapeGamesIn > 0) ? grapeGamesIn : games;
+  if (grape !== null && grape > grapeGames) {
+    alert("ぶどう回数がカウント区間ゲーム数を超えています");
+    return;
+  }
+
   const logPrior = Math.log(1/6);
   const logL = [0,0,0,0,0,0];
-  const detail = [];
 
   for (let s = 0; s < 6; s++) {
     let lp = logPrior;
-    const lpBB = logBinom(games, bb, 1/machine.BB[s]);
-    lp += lpBB;
-    let lpRB_total = 0;
+    lp += logBinom(games, bb, 1/machine.BB[s]);
     if (useSeparateReg) {
-      const lpS = logBinom(games, sReg, 1/machine.singleReg[s]);
-      const lpC = logBinom(games, cReg, 1/machine.cherryReg[s]);
-      lpRB_total = lpS + lpC;
+      lp += logBinom(games, sReg, 1/machine.singleReg[s]);
+      lp += logBinom(games, cReg, 1/machine.cherryReg[s]);
     } else {
-      lpRB_total = logBinom(games, rb, 1/machine.RB[s]);
+      lp += logBinom(games, rb, 1/machine.RB[s]);
     }
-    lp += lpRB_total;
-    let lpG = 0;
     if (grape !== null && grape > 0) {
-      lpG = logBinom(games, grape, 1/machine.grape[s]);
-      lp += lpG;
+      lp += logBinom(grapeGames, grape, 1/machine.grape[s]);
     }
     logL[s] = lp;
-    detail.push({ s: s+1, lpBB, lpRB: lpRB_total, lpG });
   }
 
   const maxL = Math.max(...logL);
@@ -495,7 +502,7 @@ function judge() {
   const sum = exped.reduce((a,b) => a+b, 0);
   const probs = exped.map(x => x / sum);
 
-  renderResults(probs, { games, bb, rb, grape, useSeparateReg, sReg, cReg, machine });
+  renderResults(probs, { games, bb, rb, grape, grapeGames, useSeparateReg, sReg, cReg, machine });
 }
 
 function renderResults(probs, info) {
@@ -526,14 +533,15 @@ function renderResults(probs, info) {
     v.textContent = `判定保留 (サンプル不足の可能性・最尤設定${top})`;
   }
 
-  const { games, bb, grape, useSeparateReg, sReg, cReg } = info;
+  const { games, bb, grape, grapeGames, useSeparateReg, sReg, cReg } = info;
   const rb = useSeparateReg ? (sReg + cReg) : info.rb;
   const bbRate = bb > 0 ? `1/${(games/bb).toFixed(1)}` : "-";
   const rbRate = rb > 0 ? `1/${(games/rb).toFixed(1)}` : "-";
   const combRate = (bb+rb) > 0 ? `1/${(games/(bb+rb)).toFixed(1)}` : "-";
-  const grRate = (grape && grape > 0) ? `1/${(games/grape).toFixed(2)}` : "未入力";
-  let s = `<div>実測 BB: <strong>${bbRate}</strong> / RB: <strong>${rbRate}</strong> / 合算: <strong>${combRate}</strong></div>
-           <div>実測 ぶどう: <strong>${grRate}</strong></div>`;
+  const grRate = (grape && grape > 0) ? `1/${(grapeGames/grape).toFixed(2)}` : "未入力";
+  const grSpan = (grape && grape > 0 && grapeGames !== games) ? ` <span style="color:var(--muted)">(${grapeGames}G区間)</span>` : "";
+  let s = `<div>実測 BB: <strong>${bbRate}</strong> / RB: <strong>${rbRate}</strong> / 合算: <strong>${combRate}</strong> <span style="color:var(--muted)">(${games}G)</span></div>
+           <div>実測 ぶどう: <strong>${grRate}</strong>${grSpan}</div>`;
   if (useSeparateReg) {
     const sRate = sReg > 0 ? `1/${(games/sReg).toFixed(1)}` : "-";
     const cRate = cReg > 0 ? `1/${(games/cReg).toFixed(1)}` : "-";
@@ -548,7 +556,7 @@ function renderResults(probs, info) {
 }
 
 function clearAll() {
-  ["games","bb","rb","grape","singleReg","cherryReg"].forEach(id => {
+  ["games","bb","rb","grape","grapeGames","singleReg","cherryReg"].forEach(id => {
     document.getElementById(id).value = "";
   });
   document.getElementById("results").classList.remove("show");
