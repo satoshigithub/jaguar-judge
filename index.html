@@ -212,9 +212,9 @@
     </div>
     <div class="row">
       <div>
-        <label>ぶどうカウント区間ゲーム数</label>
-        <input type="number" inputmode="numeric" id="grapeGames" placeholder="途中参加時のみ" min="0">
-        <div class="hint">空欄なら総ゲーム数を使用 (1回転目から見ている場合)</div>
+        <label>途中参加時の回転数</label>
+        <input type="number" inputmode="numeric" id="startGames" placeholder="途中参加時のみ" min="0">
+        <div class="hint">座った時点のデータカウンタ値。空欄なら0扱い (1回転目から)</div>
       </div>
       <div></div>
     </div>
@@ -461,7 +461,7 @@ function judge() {
   const bb = val("bb");
   const rbCombined = val("rb");
   const grape = val("grape");
-  const grapeGamesIn = val("grapeGames");
+  const startGames = val("startGames");
   const sReg = val("singleReg");
   const cReg = val("cherryReg");
 
@@ -473,9 +473,13 @@ function judge() {
   const rb = useSeparateReg ? (sReg + cReg) : rbCombined;
   if (!useSeparateReg && rb === null) { alert("RB回数を入力してください"); return; }
 
-  const grapeGames = (grapeGamesIn !== null && grapeGamesIn > 0) ? grapeGamesIn : games;
+  if (startGames !== null && startGames >= games) {
+    alert("途中参加時の回転数が総ゲーム数以上になっています");
+    return;
+  }
+  const grapeGames = (startGames !== null && startGames > 0) ? (games - startGames) : games;
   if (grape !== null && grape > grapeGames) {
-    alert("ぶどう回数がカウント区間ゲーム数を超えています");
+    alert(`ぶどう回数(${grape})がカウント区間(${grapeGames}G)を超えています`);
     return;
   }
 
@@ -556,7 +560,7 @@ function renderResults(probs, info) {
 }
 
 function clearAll() {
-  ["games","bb","rb","grape","grapeGames","singleReg","cherryReg"].forEach(id => {
+  ["games","bb","rb","grape","startGames","singleReg","cherryReg"].forEach(id => {
     document.getElementById(id).value = "";
   });
   document.getElementById("results").classList.remove("show");
